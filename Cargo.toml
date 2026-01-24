@@ -1,0 +1,8 @@
+[package]
+name = "clipscrub"
+version = "0.3.0"
+edition = "2026"
+
+[dependencies]
+arboard = "3"
+url = "2"
