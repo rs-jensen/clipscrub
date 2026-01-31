@@ -291,11 +291,13 @@ fn scrub_url(input: &str, config: &Config) -> Option<(String, Vec<String>, Strin
     if filtered.is_empty() {
         parsed.set_query(None);
     } else {
-        let qs = filtered.iter()
-            .map(|(k, v)| if v.is_empty() { k.clone() } else { format!("{}={}", k, v) })
-            .collect::<Vec<_>>()
-            .join("&");
-        parsed.set_query(Some(&qs));
+        {
+            let mut qp = parsed.query_pairs_mut();
+            qp.clear();
+            for (k, v) in &filtered {
+                qp.append_pair(k, v);
+            }
+        }
     }
     
     if config.strip_fragments {
