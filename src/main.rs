@@ -6,6 +6,9 @@ use url::Url;
 use serde::{Deserialize, Serialize};
 use directories::ProjectDirs;
 use regex::Regex;
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
+
 
 #[derive(Clone)]
 struct CleanEvent {
@@ -201,14 +204,41 @@ fn extract_domain(url: &Url) -> String {
         .unwrap_or_default()
 }
 
+static REGEX_CACHE: Lazy<RwLock<HashMap<String, Regex>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
+
 fn matches_custom_pattern(param: &str, patterns: &[String]) -> bool {
+    // 1) Hurtig read-lock path
+    {
+        let cache = REGEX_CACHE.read().unwrap();
+        for pattern in patterns {
+            if let Some(re) = cache.get(pattern) {
+                if re.is_match(param) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // 2) Slow path: compile kun dem der mangler, og cache dem
+    let mut cache = REGEX_CACHE.write().unwrap();
     for pattern in patterns {
-        if let Ok(re) = Regex::new(pattern) {
+        if let Some(re) = cache.get(pattern) {
             if re.is_match(param) {
+                return true;
+            }
+            continue;
+        }
+
+        if let Ok(re) = Regex::new(pattern) {
+            let hit = re.is_match(param);
+            cache.insert(pattern.clone(), re);
+            if hit {
                 return true;
             }
         }
     }
+
     false
 }
 
