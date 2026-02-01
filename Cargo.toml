@@ -5,4 +5,12 @@ edition = "2026"
 
 [dependencies]
 arboard = "3"
+crossterm = "0.28"
+ratatui = "0.28"
 url = "2"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+directories = "5"
+regex = "1"
+once_cell = "1"
+publicsuffix = "2
