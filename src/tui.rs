@@ -5,7 +5,7 @@ use crossterm::{
 };
 use ratatui::{prelude::*, widgets::*};
 use crate::utils::{CenteredRect, format_duration};
-use crate::App; 
+use crate::App;
 
 pub struct Tui {
     terminal: Terminal<CrosstermBackend<Stdout>>,
@@ -18,7 +18,7 @@ impl Tui {
         execute!(stdout, EnterAlternateScreen)?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
-        
+
         Ok(Self { terminal })
     }
 
@@ -38,13 +38,14 @@ impl Drop for Tui {
 
 fn ui(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(0),
-            Constraint::Length(3),
-        ])
-        .split(f.area());
+    .direction(Direction::Vertical)
+    .constraints([
+        Constraint::Length(3),
+                 Constraint::Min(0),
+                 Constraint::Length(3),
+    ])
+    // RETTELSE HER: f.area() -> f.size()
+    .split(f.size());
 
     render_tabs(f, app, chunks[0]);
 
@@ -65,10 +66,10 @@ fn ui(f: &mut Frame, app: &App) {
 fn render_tabs(f: &mut Frame, app: &App, area: Rect) {
     let titles = vec!["Live Feed", "Statistics", "Top Domains"];
     let tabs = Tabs::new(titles)
-        .block(Block::default().borders(Borders::ALL).title(" ClipScrub "))
-        .select(app.selected_tab)
-        .style(Style::default().fg(Color::DarkGray))
-        .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+    .block(Block::default().borders(Borders::ALL).title(" ClipScrub "))
+    .select(app.selected_tab)
+    .style(Style::default().fg(Color::DarkGray))
+    .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
     f.render_widget(tabs, area);
 }
 
@@ -80,10 +81,10 @@ fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let keys = " [Space] Pause | [Q] Quit | [Tab] Switch | [?] Help ";
-    
+
     let line = Line::from(vec![
         Span::styled(status_text, style.add_modifier(Modifier::BOLD)),
-        Span::styled(keys, Style::default().fg(Color::DarkGray)),
+                          Span::styled(keys, Style::default().fg(Color::DarkGray)),
     ]);
 
     let para = Paragraph::new(line).block(Block::default().borders(Borders::TOP));
@@ -92,68 +93,68 @@ fn render_status_bar(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_events(f: &mut Frame, app: &App, area: Rect) {
     let events = app.events.lock().unwrap();
-    
-    let items: Vec<ListItem> = events.iter()
-        .skip(app.scroll_state)
-        .map(|e| {
-            let time_str = format_duration(e.timestamp.elapsed());
-            
-            let mut spans = vec![
-                Span::styled(format!("{:>5} ", time_str), Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{:<20}", e.domain), Style::default().fg(Color::Blue)),
-            ];
 
-            if e.removed_params.is_empty() {
-                 spans.push(Span::styled("No params", Style::default().fg(Color::DarkGray)));
+    let items: Vec<ListItem> = events.iter()
+    .skip(app.scroll_state)
+    .map(|e| {
+        let time_str = format_duration(e.timestamp.elapsed());
+
+        let mut spans = vec![
+            Span::styled(format!("{:>5} ", time_str), Style::default().fg(Color::DarkGray)),
+         Span::styled(format!("{:<20}", e.domain), Style::default().fg(Color::Blue)),
+        ];
+
+        if e.removed_params.is_empty() {
+            spans.push(Span::styled("No params", Style::default().fg(Color::DarkGray)));
+        } else {
+            let count = e.removed_params.len();
+            let display = if count > 3 {
+                format!("-{} params", count)
             } else {
-                 let count = e.removed_params.len();
-                 let display = if count > 3 {
-                     format!("-{} params", count)
-                 } else {
-                     format!("-{}", e.removed_params.join(", "))
-                 };
-                 spans.push(Span::styled(display, Style::default().fg(Color::Red)));
-            }
-            
-            ListItem::new(Line::from(spans))
-        })
-        .collect();
+                format!("-{}", e.removed_params.join(", "))
+            };
+            spans.push(Span::styled(display, Style::default().fg(Color::Red)));
+        }
+
+        ListItem::new(Line::from(spans))
+    })
+    .collect();
 
     let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(format!(" Events ({}) ", events.len())))
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
-    
+    .block(Block::default().borders(Borders::ALL).title(format!(" Events ({}) ", events.len())))
+    .highlight_style(Style::default().add_modifier(Modifier::BOLD));
+
     f.render_widget(list, area);
 }
 
 fn render_stats(f: &mut Frame, app: &App, area: Rect) {
     let stats = app.stats.lock().unwrap();
-    
+
     let lines = vec![
         Line::from(vec![
             Span::raw("Total Processed: "),
-            Span::styled(stats.total_cleaned.to_string(), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                   Span::styled(stats.total_cleaned.to_string(), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
         ]),
         Line::from(vec![
             Span::raw("Trackers Removed: "),
-            Span::styled(stats.params_removed.to_string(), Style::default().fg(Color::Red)),
+                   Span::styled(stats.params_removed.to_string(), Style::default().fg(Color::Red)),
         ]),
         Line::from(vec![
             Span::raw("Bandwidth Saved: "),
-            Span::styled(format!("{} bytes", stats.bytes_saved), Style::default().fg(Color::Yellow)),
+                   Span::styled(format!("{} bytes", stats.bytes_saved), Style::default().fg(Color::Yellow)),
         ]),
         Line::from(""),
         Line::from(vec![
             Span::raw("Active Rules: "),
-            Span::styled(app.config.domain_rules.len().to_string(), Style::default().fg(Color::Cyan)),
+                   Span::styled(app.config.domain_rules.len().to_string(), Style::default().fg(Color::Cyan)),
         ]),
         Line::from(vec![
             Span::raw("Mode: "),
-            if app.config.aggressive_mode {
-                Span::styled("Aggressive", Style::default().fg(Color::Red))
-            } else {
-                Span::styled("Normal", Style::default().fg(Color::Green))
-            },
+                   if app.config.aggressive_mode {
+                       Span::styled("Aggressive", Style::default().fg(Color::Red))
+                   } else {
+                       Span::styled("Normal", Style::default().fg(Color::Green))
+                   },
         ]),
     ];
 
@@ -168,14 +169,14 @@ fn render_domains(f: &mut Frame, app: &App, area: Rect) {
     domains.sort_by(|a, b| b.1.cmp(a.1));
 
     let items: Vec<ListItem> = domains.iter()
-        .take(50)
-        .map(|(domain, count)| {
-            ListItem::new(Line::from(vec![
-                Span::styled(format!("{:>6} ", count), Style::default().fg(Color::Yellow)),
-                Span::styled(*domain, Style::default().fg(Color::White)),
-            ]))
-        })
-        .collect();
+    .take(50)
+    .map(|(domain, count)| {
+        ListItem::new(Line::from(vec![
+            Span::styled(format!("{:>6} ", count), Style::default().fg(Color::Yellow)),
+                                 Span::styled(*domain, Style::default().fg(Color::White)),
+        ]))
+    })
+    .collect();
 
     let list = List::new(items).block(Block::default().borders(Borders::ALL).title(" Top Domains "));
     f.render_widget(list, area);
@@ -183,9 +184,10 @@ fn render_domains(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_help_popup(f: &mut Frame) {
     let block = Block::default().title(" Help ").borders(Borders::ALL).style(Style::default().bg(Color::DarkGray));
-    let area = f.area().centered(60, 40);
+    // RETTELSE HER: f.area() -> f.size()
+    let area = f.size().centered(60, 40);
     f.render_widget(Clear, area);
-    
+
     let text = vec![
         "Navigation",
         "----------",
