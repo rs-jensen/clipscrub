@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use directories::ProjectDirs;
 use regex::Regex;
 use once_cell::sync::Lazy;
-use std::sync::Mutex;
-
+use std::sync::RwLock; 
+use std::borrow::Cow;
 
 #[derive(Clone)]
 struct CleanEvent {
@@ -208,7 +208,7 @@ static REGEX_CACHE: Lazy<RwLock<HashMap<String, Regex>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
 fn matches_custom_pattern(param: &str, patterns: &[String]) -> bool {
-    // 1) Hurtig read-lock path
+    
     {
         let cache = REGEX_CACHE.read().unwrap();
         for pattern in patterns {
@@ -220,7 +220,7 @@ fn matches_custom_pattern(param: &str, patterns: &[String]) -> bool {
         }
     }
 
-    // 2) Slow path: compile kun dem der mangler, og cache dem
+    
     let mut cache = REGEX_CACHE.write().unwrap();
     for pattern in patterns {
         if let Some(re) = cache.get(pattern) {
@@ -242,103 +242,123 @@ fn matches_custom_pattern(param: &str, patterns: &[String]) -> bool {
     false
 }
 
+
 fn scrub_url(input: &str, config: &Config) -> Option<(String, Vec<String>, String)> {
     let trimmed = input.trim();
+    
+    if !trimmed.starts_with("http") {
+        return None;
+    }
+
     let mut parsed = Url::parse(trimmed).ok()?;
     let domain = extract_domain(&parsed);
+    
     
     if config.whitelist_domains.iter().any(|d| domain.contains(d)) {
         return None;
     }
     
     let mut removed = Vec::new();
+    let mut modified = false;
     let domain_rule = config.domain_rules.get(&domain);
+    
     
     if let Some(rule) = domain_rule {
         if let Some(ref patterns) = rule.strip_path_patterns {
-            let path = parsed.path().to_string();
-            let mut new_path = path.clone();
+            let path = parsed.path();
+            let mut new_path = Cow::Borrowed(path);
+            
             for pattern in patterns {
                 if let Ok(re) = Regex::new(pattern) {
-                    new_path = re.replace_all(&new_path, "").to_string();
+                    if re.is_match(&new_path) {
+                        new_path = Cow::Owned(re.replace_all(&new_path, "").to_string());
+                        modified = true;
+                    }
                 }
             }
-            if new_path != path {
-                parsed.set_path(&new_path);
+            if let Cow::Owned(p) = new_path {
+                parsed.set_path(&p);
             }
         }
     }
     
-    let original_query: Vec<(String, String)> = parsed.query_pairs()
+
+    let current_query: Vec<(String, String)> = parsed.query_pairs()
         .map(|(k, v)| (k.into_owned(), v.into_owned()))
         .collect();
-    
-    let filtered: Vec<(String, String)> = original_query.into_iter()
-        .filter(|(k, _)| {
+
+    if !current_query.is_empty() {
+        let mut new_query = Vec::with_capacity(current_query.len());
+        let mut query_changed = false;
+
+        for (k, v) in current_query {
             let dominated = k.to_lowercase();
+            let mut should_remove = false;
+
             
             if let Some(rule) = domain_rule {
                 if let Some(ref keep) = rule.keep_only {
                     if !keep.iter().any(|allowed| allowed.to_lowercase() == dominated) {
-                        removed.push(k.clone());
-                        return false;
+                        should_remove = true;
                     }
-                    return true;
-                }
-                if rule.params.iter().any(|p| p.to_lowercase() == dominated) {
-                    removed.push(k.clone());
-                    return false;
+                } else if rule.params.iter().any(|p| p.to_lowercase() == dominated) {
+                    should_remove = true;
                 }
             }
+
             
-            if config.global_params.iter().any(|p| p.to_lowercase() == dominated) {
-                removed.push(k.clone());
-                return false;
-            }
-            
-            if matches_custom_pattern(&dominated, &config.custom_patterns) {
-                removed.push(k.clone());
-                return false;
-            }
-            
-            if config.aggressive_mode {
-                let dominated_lower = dominated.to_lowercase();
-                let suspicious = ["track", "click", "ref", "campaign", "source", "aff", "partner"];
-                if suspicious.iter().any(|s| dominated_lower.contains(s)) {
-                    removed.push(k.clone());
-                    return false;
+            if !should_remove {
+                if config.global_params.iter().any(|p| p.to_lowercase() == dominated) {
+                    should_remove = true;
+                } else if matches_custom_pattern(&dominated, &config.custom_patterns) {
+                    should_remove = true;
+                } else if config.aggressive_mode {
+                    let suspicious = ["track", "click", "ref", "campaign", "source", "aff", "partner"];
+                    if suspicious.iter().any(|s| dominated.contains(s)) {
+                        should_remove = true;
+                    }
                 }
             }
-            
-            true
-        })
-        .collect();
-    
-    if removed.is_empty() {
-        return None;
-    }
-    
-    if filtered.is_empty() {
-        parsed.set_query(None);
-    } else {
-        {
-            let mut qp = parsed.query_pairs_mut();
-            qp.clear();
-            for (k, v) in &filtered {
-                qp.append_pair(k, v);
+
+            if should_remove {
+                removed.push(k);
+                query_changed = true;
+            } else {
+                new_query.push((k, v));
+            }
+        }
+
+        if query_changed {
+            modified = true;
+            if new_query.is_empty() {
+                parsed.set_query(None);
+            } else {
+                let mut qp = parsed.query_pairs_mut();
+                qp.clear();
+                for (k, v) in new_query {
+                    qp.append_pair(&k, &v);
+                }
             }
         }
     }
     
-    if config.strip_fragments {
+    
+    if config.strip_fragments && parsed.fragment().is_some() {
         parsed.set_fragment(None);
+        modified = true;
+    }
+    
+    if !modified {
+        return None;
     }
     
     let mut result = parsed.to_string();
+    
     if result.ends_with('?') { result.pop(); }
     
     Some((result, removed, domain))
 }
+
 
 fn clipboard_monitor(events: Arc<Mutex<Vec<CleanEvent>>>, stats: Arc<Mutex<Stats>>, config: Arc<Config>, paused: Arc<Mutex<bool>>) {
     let mut clip = match Clipboard::new() {
