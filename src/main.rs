@@ -1,14 +1,21 @@
 use arboard::Clipboard;
 use crossterm::{terminal::{enable_raw_mode, disable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}, execute, event::{self, Event, KeyCode, KeyEventKind}};
 use ratatui::{prelude::*, widgets::*};
-use std::{io::{stdout, Stdout}, time::{Duration, Instant}, collections::HashMap, sync::{Arc, Mutex}, thread, fs, path::PathBuf};
+use std::{
+    io::{stdout, Stdout}, 
+    time::{Duration, Instant}, 
+    collections::HashMap, 
+    sync::{Arc, Mutex, RwLock}, 
+    thread, 
+    fs, 
+    path::PathBuf,
+    borrow::Cow
+};
 use url::Url;
 use serde::{Deserialize, Serialize};
 use directories::ProjectDirs;
 use regex::Regex;
 use once_cell::sync::Lazy;
-use std::sync::RwLock; 
-use std::borrow::Cow;
 
 #[derive(Clone)]
 struct CleanEvent {
@@ -208,7 +215,6 @@ static REGEX_CACHE: Lazy<RwLock<HashMap<String, Regex>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
 fn matches_custom_pattern(param: &str, patterns: &[String]) -> bool {
-    
     {
         let cache = REGEX_CACHE.read().unwrap();
         for pattern in patterns {
@@ -220,7 +226,6 @@ fn matches_custom_pattern(param: &str, patterns: &[String]) -> bool {
         }
     }
 
-    
     let mut cache = REGEX_CACHE.write().unwrap();
     for pattern in patterns {
         if let Some(re) = cache.get(pattern) {
@@ -242,17 +247,14 @@ fn matches_custom_pattern(param: &str, patterns: &[String]) -> bool {
     false
 }
 
-
 fn scrub_url(input: &str, config: &Config) -> Option<(String, Vec<String>, String)> {
     let trimmed = input.trim();
-    
     if !trimmed.starts_with("http") {
         return None;
     }
 
     let mut parsed = Url::parse(trimmed).ok()?;
     let domain = extract_domain(&parsed);
-    
     
     if config.whitelist_domains.iter().any(|d| domain.contains(d)) {
         return None;
@@ -261,7 +263,6 @@ fn scrub_url(input: &str, config: &Config) -> Option<(String, Vec<String>, Strin
     let mut removed = Vec::new();
     let mut modified = false;
     let domain_rule = config.domain_rules.get(&domain);
-    
     
     if let Some(rule) = domain_rule {
         if let Some(ref patterns) = rule.strip_path_patterns {
@@ -282,7 +283,6 @@ fn scrub_url(input: &str, config: &Config) -> Option<(String, Vec<String>, Strin
         }
     }
     
-
     let current_query: Vec<(String, String)> = parsed.query_pairs()
         .map(|(k, v)| (k.into_owned(), v.into_owned()))
         .collect();
@@ -294,20 +294,21 @@ fn scrub_url(input: &str, config: &Config) -> Option<(String, Vec<String>, Strin
         for (k, v) in current_query {
             let dominated = k.to_lowercase();
             let mut should_remove = false;
+            let mut is_whitelisted = false;
 
-            
             if let Some(rule) = domain_rule {
                 if let Some(ref keep) = rule.keep_only {
                     if !keep.iter().any(|allowed| allowed.to_lowercase() == dominated) {
                         should_remove = true;
+                    } else {
+                        is_whitelisted = true;
                     }
                 } else if rule.params.iter().any(|p| p.to_lowercase() == dominated) {
                     should_remove = true;
                 }
             }
 
-            
-            if !should_remove {
+            if !should_remove && !is_whitelisted {
                 if config.global_params.iter().any(|p| p.to_lowercase() == dominated) {
                     should_remove = true;
                 } else if matches_custom_pattern(&dominated, &config.custom_patterns) {
@@ -342,7 +343,6 @@ fn scrub_url(input: &str, config: &Config) -> Option<(String, Vec<String>, Strin
         }
     }
     
-    
     if config.strip_fragments && parsed.fragment().is_some() {
         parsed.set_fragment(None);
         modified = true;
@@ -353,12 +353,10 @@ fn scrub_url(input: &str, config: &Config) -> Option<(String, Vec<String>, Strin
     }
     
     let mut result = parsed.to_string();
-    
     if result.ends_with('?') { result.pop(); }
     
     Some((result, removed, domain))
 }
-
 
 fn clipboard_monitor(events: Arc<Mutex<Vec<CleanEvent>>>, stats: Arc<Mutex<Stats>>, config: Arc<Config>, paused: Arc<Mutex<bool>>) {
     let mut clip = match Clipboard::new() {
