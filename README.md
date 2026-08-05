@@ -56,7 +56,7 @@ Clean a single URL directly from the command line:
 ./clipscrub --clean "https://example.com?utm_source=test"
 ```
 
-Useful for piping or quick one-off cleaning.
+Useful for piping or quick one-off cleaning
 
 ---
 
