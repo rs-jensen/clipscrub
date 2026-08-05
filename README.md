@@ -1,31 +1,63 @@
-# Clipboard Scrubber
+---
 
-Clipboard Scrubber is a small CLI tool that runs in the background and cleans URLs when you copy them. It removes tracking parameters such as UTM tags, ref IDs, and affiliate markers, so you always paste clean, privacy-friendly links.
+# ClipScrub
 
-## What it does
-- Monitors your clipboard for URLs
-- Strips common tracking and analytics parameters
-- Applies domain-specific cleaning rules (YouTube, Twitter/X, Amazon, etc.)
-- Supports custom rules via a config file
-- Optional TUI to see what was cleaned and basic stats
+ClipScrub is a small, fast, privacy-focused clipboard cleaner written in Rust.
 
-## Why it exists
-Tracking parameters are everywhere and leak data when you share links. Clipboard Scrubber removes them automatically, without browser extensions or manual cleanup.
+It runs in the background and watches your clipboard for URLs. When it detects one, it automatically removes tracking parameters, affiliate tags, and other unnecessary junk before you paste the link anywhere else.
 
-## How it works
-When a URL is copied, it is parsed, cleaned based on global and domain rules, and written back to the clipboard. Non-URL clipboard content is ignored.
+The goal is simple: clean links with zero friction and zero data leaving your machine.
 
-## Configuration
-A `config.toml` file is created on first run. You can:
-- Add or remove parameters to strip
-- Define per-domain rules
-- Whitelist domains
-- Enable aggressive cleaning
+The project includes a terminal UI (TUI) for live monitoring, safe config handling, and low-latency processing using cached regex rules.
 
-## Use cases
-- Sharing links without trackers
-- Improving privacy by default
-- Keeping URLs short and readable
+The release binary is located at:
 
-## Status
-Early-stage but functional. Focused on correctness, transparency, and minimalism
+```
+./target/release/clipscrub
+```
+
+---
+
+## Usage
+
+### Interactive mode (TUI)
+
+Start ClipScrub normally to launch the monitoring interface:
+
+```bash
+./clipscrub
+```
+
+Key bindings:
+
+* Space / p — Pause or resume monitoring
+* Tab — Switch tabs (Live Feed / Stats / Top Domains)
+* j / k — Scroll through history
+* c — Clear event history
+* q — Quit
+
+---
+
+### Daemon mode
+
+Run ClipScrub silently in the background without the UI:
+
+```bash
+./clipscrub --daemon
+```
+
+---
+
+### Single URL mode
+
+Clean a single URL directly from the command line:
+
+```bash
+./clipscrub --clean "https://example.com?utm_source=test"
+```
+
+Useful for piping or quick one-off cleaning.
+
+---
+
+
