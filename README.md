@@ -28,4 +28,4 @@ A `config.toml` file is created on first run. You can:
 - Keeping URLs short and readable
 
 ## Status
-Early-stage but functional. Focused on correctness, transparency, and minimalism.
+Early-stage but functional. Focused on correctness, transparency, and minimalism
