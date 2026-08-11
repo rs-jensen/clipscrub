@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use arboard::Clipboard;
 use crate::{Config, Stats, CleanEvent};
 use crate::url_cleaner::UrlCleaner;
-
+// test
 pub struct ClipboardWorker {
     events: Arc<Mutex<Vec<CleanEvent>>>,
     stats: Arc<Mutex<Stats>>,
